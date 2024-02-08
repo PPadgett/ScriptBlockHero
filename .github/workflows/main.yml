@@ -81,6 +81,7 @@ jobs:
             Write-Host $message
           }
           throw "PSScriptAnalyzer found issues excluding specified exclusions."
+          }
 
     - name: Run Pester Tests and Convert Coverage Report
       shell: pwsh
