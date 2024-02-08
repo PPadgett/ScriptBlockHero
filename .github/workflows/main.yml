@@ -111,6 +111,7 @@ jobs:
         # Ensure the Cobertura report file was generated
         if (-not (Test-Path -Path $coberturaOutputFile)) {
           throw "Cobertura coverage report file not generated at $coberturaOutputFile"
+        }
         
     - name: Publish Code Coverage Results
       uses: actions/upload-artifact@v3
