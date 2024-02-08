@@ -113,8 +113,7 @@ jobs:
           throw "Cobertura coverage report file not generated at $coberturaOutputFile"
         }
         
-    - name: Publish Code Coverage Results
-      uses: actions/upload-artifact@v3
-      with:
-        name: Cobertura Code Coverage Report
-        path: ${{ github.workspace }}/Cobertura.xml
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
