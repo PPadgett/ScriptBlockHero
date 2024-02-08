@@ -142,6 +142,3 @@ if ($MyInvocation.MyCommand.Name -and $PSBoundParameters.Count -gt 0) {
         }
     }
 }
-else {
-    Write-Verbose "Skipping function execution due to the absence of required execution context or parameters."
-}
