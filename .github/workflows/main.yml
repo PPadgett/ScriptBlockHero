@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Required Modules
+      shell: pwsh
+      run: |
+        # Define the minimum required versions of Pester and PSScriptAnalyzer
+        $requiredPesterVersion = [Version]'5.5.0'
+        $requiredScriptAnalyzerVersion = [Version]'1.20.0'
+        
+        # Check and install Pester if necessary
+        $pesterModule = Get-Module -ListAvailable -Name Pester | 
+                        Where-Object { $_.Version -ge $requiredPesterVersion } | 
+                        Sort-Object Version -Descending | 
+                        Select-Object -First 1
+        if (-not $pesterModule) {
+          Write-Host "Required Pester version ($requiredPesterVersion) not found. Installing..."
+          Install-Module -Name Pester -MinimumVersion $requiredPesterVersion -Scope CurrentUser -Force -AllowClobber
+          Write-Host "Installed Pester version $requiredPesterVersion or higher"
+        } else {
+          Write-Host "Pester version $($pesterModule.Version) is already installed."
+        }
+        
+        # Check and install PSScriptAnalyzer if necessary
+        $scriptAnalyzerModule = Get-Module -ListAvailable -Name PSScriptAnalyzer | 
+                                Where-Object { $_.Version -ge $requiredScriptAnalyzerVersion } | 
+                                Sort-Object Version -Descending | 
+                                Select-Object -First 1
+        if (-not $scriptAnalyzerModule) {
+          Write-Host "Required PSScriptAnalyzer version ($requiredScriptAnalyzerVersion) not found. Installing..."
+          Install-Module -Name PSScriptAnalyzer -MinimumVersion $requiredScriptAnalyzerVersion -Scope CurrentUser -Force
+          Write-Host "Installed PSScriptAnalyzer version $requiredScriptAnalyzerVersion or higher"
+        } else {
+          Write-Host "PSScriptAnalyzer version $($scriptAnalyzerModule.Version) is already installed."
+        }
+
+    - name: Install ReportGenerator
+      shell: pwsh
+      run: |
+        $desiredVersion = "4.8.12" # Specify the desired version of ReportGenerator
+        $installed = dotnet tool list --global | Select-String "reportgenerator"
+        if (-not $installed -or $installed -notmatch $desiredVersion) {
+          Write-Host "Installing or updating ReportGenerator to version $desiredVersion..."
+          dotnet tool update --global dotnet-reportgenerator-globaltool --version $desiredVersion
+        }
+        else {
+          Write-Host "ReportGenerator version $desiredVersion is already installed."
+        }
+
+    - name: PowerShell Syntax Check
+      shell: pwsh
+      run: |
+        Get-ChildItem -Path .\*.ps1 -Recurse | ForEach-Object {
+          $syntaxErrors = $null
+          $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Path $_.FullName -Raw), [ref]$syntaxErrors)
+          if ($syntaxErrors.Count -gt 0) {
+            $syntaxErrors | ForEach-Object { Write-Host "Syntax error in file $($_.File): Line $($_.StartLine) - $($_.Message)" }
+            throw "Syntax check failed."
+          }
+        }
+
+    - name: Lint PowerShell Scripts with PSScriptAnalyzer
+      shell: pwsh
+      run: |
+        $results = Invoke-ScriptAnalyzer -Path .\ -Recurse
+        $filteredResults = $results | Where-Object { -not ($_.RuleName -eq 'PSAvoidGlobalVars' -and $_.Message -match 'global:PesterTesting') }
+        if ($filteredResults.Count -gt 0) {
+          foreach ($result in $filteredResults) {
+            $message = "$($result.RuleName) - $($result.Severity): $($result.Message) at $($result.ScriptName):$($result.Line)"
+            Write-Host $message
+          }
+          throw "PSScriptAnalyzer found issues excluding specified exclusions."
+
+    - name: Run Pester Tests and Convert Coverage Report
+      shell: pwsh
+      run: |
+        # Define the file paths
+        $pesterCoverageOutputFile = "${{ github.workspace }}/PesterCoverage.xml"
+        $coberturaOutputFile = "${{ github.workspace }}/Cobertura.xml" # Corrected file name
+
+        # Run Pester tests and generate coverage report
+        $pesterParams = @{
+          Path                   = '.\Tests\'
+          Passthru               = $true
+          CodeCoverage           = (Get-ChildItem -Path .\*.ps1 -Recurse).FullName
+          OutputFormat           = 'NUnitXml'
+          CodeCoverageOutputFile = $pesterCoverageOutputFile
+        }
+        Invoke-Pester @pesterParams
+        
+        # Ensure the Pester coverage report file path is correct
+        if (-not (Test-Path -Path $pesterCoverageOutputFile)) {
+          throw "Pester coverage report file not found at $pesterCoverageOutputFile"
+        }
+
+        # Convert the coverage report to Cobertura format using ReportGenerator
+        reportgenerator "-reports:$pesterCoverageOutputFile" "-targetdir:${{ github.workspace }}" "-reporttypes:Cobertura"
+
+        # Ensure the Cobertura report file was generated
+        if (-not (Test-Path -Path $coberturaOutputFile)) {
+          throw "Cobertura coverage report file not generated at $coberturaOutputFile"
+        
+    - name: Publish Code Coverage Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: Cobertura Code Coverage Report
+        path: ${{ github.workspace }}/Cobertura.xml
