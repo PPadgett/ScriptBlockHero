@@ -247,8 +247,6 @@ The provided Pester testing setup and the accompanying test cases are crucial fo
 
 #### BeforeAll Block
 
-
-- **Global Variable Setting**: `$global:PesterTesting` is set to `$true` to flag the test environment. This allows scripts to conditionally execute code paths that are specifically intended for testing scenarios, ensuring that test executions do not affect production or other environments.
 - **Script File Identification and Validation**: Extracts the filename of the script under test and verifies its existence in the expected directory. This step is critical to ensure that the tests are being executed against the correct script file, preventing false positives or negatives caused by testing the wrong script version.
 - **Dot-Sourcing the Script File**: By dot-sourcing the script file, it loads its functions into the current PowerShell session, making them available for testing. This step is essential for dynamically analyzing and testing the script's functions without needing to hardcode function names or paths.
 - **AST (Abstract Syntax Tree) Analysis**: Utilizes PowerShell's AST to introspectively analyze the script file for function definitions. This advanced technique allows for the identification of all functions within the script, supporting dynamic and comprehensive testing coverage. It ensures that new or modified functions are automatically included in the test scope.
